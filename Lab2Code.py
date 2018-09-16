@@ -5,6 +5,9 @@ from skimage import io, feature, filters, exposure, color
 import cozmo
 from cozmo.util import degrees
 import time
+import asyncio
+import sys
+from PIL import Image, ImageDraw
 
 
 class ImageClassifier:
@@ -31,17 +34,15 @@ class ImageClassifier:
         return (data, labels)
 
     def extract_image_features(self, data):
-        l = []
-        for im in data:
-            im_gray = color.rgb2gray(im)
+        feature_data = []
+        for image in data:
+            converted_image = color.rgb2gray(image)
+            exp = exposure.adjust_gamma(converted_image, gamma=1.5, gain=1.5)
+            gauss = filters.gaussian(exp)
+            features = feature.hog(gauss, orientations=10, pixels_per_cell=(11, 11), cells_per_block=(3, 3))
+            feature_data.append(features)
 
-            im_gray = filters.gaussian(im_gray, sigma=0.4)
 
-            f = feature.hog(im_gray, orientations=10, pixels_per_cell=(48, 48), cells_per_block=(4, 4),
-                            feature_vector=True, block_norm='L2-Hys')
-            l.append(f)
-
-        feature_data = np.array(l)
         return (feature_data)
 
     def train_classifier(self, train_data, train_labels):
@@ -58,7 +59,7 @@ class Actions:
 
     def say_image(self, image):
         a = ""
-        a += classifier.predict_labels(image)
+        a += classifier.predict_labels(str(image))
         return a
 
 
@@ -69,27 +70,33 @@ def main():
     img_clf = ImageClassifier()
     actions = Actions()
 
-    (train_raw, train_labels) = img_clf.load_data_from_folder('./train/')
+    (train_raw, train_labels) = img_clf.load_data_from_folder('./Fall_2018_Class_Images/')
     train_data = img_clf.extract_image_features(train_raw)
-
     img_clf.train_classifier(train_data, train_labels)
 
+    def image_to_array(image):
+        image_array = np.asarray(image)
+        image_array.flags.writeable = True
+        return image_array
 
     def cozmo_program(robot: cozmo.robot.Robot):
-        robot.set_head_angle(degrees(0)).wait_for_completed()
         robot.camera.image_stream_enabled = True
+        robot.camera.color_image_enabled = False
+        robot.camera.enable_auto_exposure()
 
-        latest_image = robot.world.latest_image
+        robot.set_head_angle(cozmo.util.degrees(0)).wait_for_completed()
+        while True:
+            latest_image = robot.world.latest_image
+            new_image = np.array(latest_image.raw_image)
+            #new_image = color.rgb2gray(new_image)
+            new_image = img_clf.extract_image_features(new_image)
+            s = img_clf.predict_labels(new_image)
+            print(s)
 
-        label = img_clf.predict_labels(latest_image)
-        actions.say_image(label)
-
-
-        time.sleep(10)
+    #time.sleep(20)
 
     cozmo.run_program(cozmo_program, use_viewer=True, force_viewer_on_top=True)
 
 
 if __name__ == "__main__":
     main()
-
