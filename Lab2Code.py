@@ -34,15 +34,17 @@ class ImageClassifier:
         return (data, labels)
 
     def extract_image_features(self, data):
-        feature_data = []
-        for image in data:
-            converted_image = color.rgb2gray(image)
-            exp = exposure.adjust_gamma(converted_image, gamma=1.5, gain=1.5)
-            gauss = filters.gaussian(exp)
-            features = feature.hog(gauss, orientations=10, pixels_per_cell=(11, 11), cells_per_block=(3, 3))
-            feature_data.append(features)
+        l = []
+        for im in data:
+            im_gray = color.rgb2gray(im)
 
+            im_gray = filters.gaussian(im_gray, sigma=0.4)
 
+            f = feature.hog(im_gray, orientations=10, pixels_per_cell=(48, 48), cells_per_block=(4, 4),
+                            feature_vector=True, block_norm='L2-Hys')
+            l.append(f)
+
+        feature_data = np.array(l)
         return (feature_data)
 
     def train_classifier(self, train_data, train_labels):
@@ -53,24 +55,12 @@ class ImageClassifier:
         predicted_labels = self.classifer.predict(data)
         return predicted_labels
 
-class Actions:
-
-    classifier = ImageClassifier()
-
-    def say_image(self, image):
-        a = ""
-        a += classifier.predict_labels(str(image))
-        return a
-
-
-
 
 def main():
 
     img_clf = ImageClassifier()
-    actions = Actions()
 
-    (train_raw, train_labels) = img_clf.load_data_from_folder('./Fall_2018_Class_Images/')
+    (train_raw, train_labels) = img_clf.load_data_from_folder('./train/')
     train_data = img_clf.extract_image_features(train_raw)
     img_clf.train_classifier(train_data, train_labels)
 
@@ -85,13 +75,20 @@ def main():
         robot.camera.enable_auto_exposure()
 
         robot.set_head_angle(cozmo.util.degrees(0)).wait_for_completed()
+
         while True:
             latest_image = robot.world.latest_image
-            new_image = np.array(latest_image.raw_image)
-            #new_image = color.rgb2gray(new_image)
-            new_image = img_clf.extract_image_features(new_image)
-            s = img_clf.predict_labels(new_image)
-            print(s)
+            if latest_image is not None:
+                new_image = latest_image.raw_image
+                new_image = np.array(new_image)
+                image = img_clf.extract_image_features([new_image])
+                s = str(img_clf.predict_labels(image))
+                robot.say_text(s)
+
+                if "order" in s:
+                    robot.drive_wheels(2,5)
+
+                time.sleep(10)
 
     #time.sleep(20)
 
