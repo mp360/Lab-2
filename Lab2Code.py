@@ -3,7 +3,7 @@ import re
 from sklearn import svm, metrics
 from skimage import io, feature, filters, exposure, color
 import cozmo
-from cozmo.util import degrees
+from cozmo.util import degrees, distance_mm, speed_mmps
 import time
 import asyncio
 import sys
@@ -60,14 +60,9 @@ def main():
 
     img_clf = ImageClassifier()
 
-    (train_raw, train_labels) = img_clf.load_data_from_folder('./train/')
+    (train_raw, train_labels) = img_clf.load_data_from_folder('./images/')
     train_data = img_clf.extract_image_features(train_raw)
     img_clf.train_classifier(train_data, train_labels)
-
-    def image_to_array(image):
-        image_array = np.asarray(image)
-        image_array.flags.writeable = True
-        return image_array
 
     def cozmo_program(robot: cozmo.robot.Robot):
         robot.camera.image_stream_enabled = True
@@ -83,12 +78,51 @@ def main():
                 new_image = np.array(new_image)
                 image = img_clf.extract_image_features([new_image])
                 s = str(img_clf.predict_labels(image))
-                robot.say_text(s)
+
 
                 if "order" in s:
-                    robot.drive_wheels(2,5)
+                    for i in range(1):
+                        robot.say_text(s).wait_for_completed()
+                        robot.drive_wheels(2,5)
+                        time.sleep(18)
 
-                time.sleep(10)
+                if "drone" in s:
+                    robot.say_text(s).wait_for_completed()
+                    cube = robot.world.wait_for_observed_light_cube(timeout=30)
+                    robot.pickup_object(cube).wait_for_completed()
+                    robot.drive_straight(distance_mm(100), speed_mmps(30)).wait_for_completed()
+                    robot.place_object_on_ground_here(cube).wait_for_completed()
+                    robot.drive_straight(distance_mm(-100), speed_mmps(30)).wait_for_completed()
+                    robot.set_head_angle(cozmo.util.degrees(0)).wait_for_completed()
+
+
+                if "inspection" in s:
+                    robot.say_text(s).wait_for_completed()
+                    #time.sleep(5)
+
+                    for i in range(4):
+                        robot.move_lift(.2)
+                        robot.drive_straight(distance_mm(100), speed_mmps(50)).wait_for_completed()
+                        robot.move_lift(-.4)
+                        robot.turn_in_place(degrees(90)).wait_for_completed()
+                    robot.set_head_angle(cozmo.util.degrees(0)).wait_for_completed()
+
+                if "plane" in s:
+                    robot.say_text(s).wait_for_completed()
+
+                if "truck" in s:
+                    robot.say_text(s).wait_for_completed()
+
+                if "hands" in s:
+                    robot.say_text(s).wait_for_completed()
+
+                if "place" in s:
+                    robot.say_text(s).wait_for_completed()
+
+                if "none" in s:
+                    time.sleep(5)
+
+
 
     #time.sleep(20)
 
